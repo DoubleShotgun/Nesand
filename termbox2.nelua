@@ -1,0 +1,78 @@
+##[[
+	cdefine 'TB_IMPL'
+	cdefine 'TB_OPT_ATTR_W 64'
+	cinclude 'termbox2.h'
+]]
+
+require("string")
+
+global KEY_F1:cint <comptime>               =  (0xffff - 0)
+global KEY_F2:cint <comptime>               =  (0xffff - 1)
+global KEY_F3:cint <comptime>               =  (0xffff - 2)
+global KEY_F4:cint <comptime>               =  (0xffff - 3)
+global KEY_F5:cint <comptime>               =  (0xffff - 4)
+global KEY_F6:cint <comptime>               =  (0xffff - 5)
+global KEY_F7:cint <comptime>               =  (0xffff - 6)
+global KEY_F8:cint <comptime>               =  (0xffff - 7)
+global KEY_F9:cint <comptime>               =  (0xffff - 8)
+global KEY_F10:cint <comptime>              =  (0xffff - 9)
+global KEY_F11:cint <comptime>              =  (0xffff - 10)
+global KEY_F12:cint <comptime>              =  (0xffff - 11)
+global KEY_INSERT:cint <comptime>           =  (0xffff - 12)
+global KEY_DELETE:cint <comptime>           =  (0xffff - 13)
+global KEY_HOME:cint <comptime>             =  (0xffff - 14)
+global KEY_END:cint <comptime>              =  (0xffff - 15)
+global KEY_PGUP:cint <comptime>             =  (0xffff - 16)
+global KEY_PGDN:cint <comptime>             =  (0xffff - 17)
+global KEY_UP:cint <comptime>               =  (0xffff - 18)
+global KEY_DOWN:cint <comptime>             =  (0xffff - 19)
+global KEY_LEFT:cint <comptime>             =  (0xffff - 20)
+global KEY_RIGHT:cint <comptime>            =  (0xffff - 21)
+global KEY_BACK_TAB:cint <comptime>         =  (0xffff - 22)
+global KEY_MOUSE_LEFT:cint <comptime>       =  (0xffff - 23)
+global KEY_MOUSE_RIGHT:cint <comptime>      =  (0xffff - 24)
+global KEY_MOUSE_MIDDLE:cint <comptime>     =  (0xffff - 25)
+global KEY_MOUSE_RELEASE:cint <comptime>    =  (0xffff - 26)
+global KEY_MOUSE_WHEEL_UP:cint <comptime>   =  (0xffff - 27)
+global KEY_MOUSE_WHEEL_DOWN:cint <comptime> =  (0xffff - 28)
+
+global uintattr_t:type <cimport,nodecl> = uint64
+global tb_event:type <cimport,nodecl> = @record{
+	type:uint8, 
+	mod:uint8,  
+	key:uint16, 
+	ch:uint32,  
+	w:int32,    
+	h:int32,    
+	x:int32,    
+	y:int32
+}
+
+global function tb_init(): void <cimport,nodecl> end
+global function tb_init_file(path:cstring): void <cimport,nodecl> end
+global function tb_shutdown(): void <cimport,nodecl> end
+
+global function tb_width(): cint <cimport,nodecl> end
+global function tb_height(): cint <cimport,nodecl> end
+
+global function tb_printf(x:cint, y:cint, fg:uintattr_t, bg:uintattr_t, str:cstring,...: varargs): cint <cimport,nodecl> end
+
+local function _set_cell(x:cint, y:cint, ch:uint32, fg:uintattr_t, bg:uintattr_t): cint <cimport "tb_set_cell",nodecl> end
+
+global function tb_set_cell(x:cint, y:cint, ch:string, fg:uintattr_t, bg:uintattr_t): cint 
+	return _set_cell(x,y,string.byte(ch),fg,bg)
+end
+
+global function tb_present(): cint <cimport,nodecl> end
+global function tb_clear(): cint <cimport,nodecl> end
+global function tb_set_clear_attrs(fg:uintattr_t, bg:uintattr_t): cint <cimport,nodecl> end
+
+global function tb_poll_event(event:*tb_event): cint <cimport,nodecl> end
+global function tb_peek_event(event:*tb_event,timeout_ms:cint): cint <cimport,nodecl> end
+
+global function tb_set_input_mode(mode:cint): cint <cimport,nodecl> end
+global function tb_set_output_mode(mode:cint): cint <cimport,nodecl> end
+
+global function tb_utf8_unicode_to_char(out:cstring, c:uint32): cint <cimport,nodecl> end
+global function tb_char_to_utf8_unicode(out:*uint32, c:cstring): cint <cimport,nodecl> end
+

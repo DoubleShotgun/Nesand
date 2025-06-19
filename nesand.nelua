@@ -1,0 +1,286 @@
+require("termbox2")
+require("io")
+require("os")
+require("math")
+require("vector")
+require("string")
+
+local function hsv2rgb(H:integer, S:integer, V:integer):cint
+	local r:number,g:number,b:number
+	
+	local h = H/360
+	local s = S/100
+	local v = V/100
+
+	local i:integer = math.floor(h * 6);
+	local f = h * 6 - i;
+	local p = v * (1 - s);
+	local q = v * (1 - f * s);
+	local t = v * (1 - (1 - f) * s);
+		
+	switch (i % 6) do
+		case 0 then r = v g = t b = p
+		case 1 then r = q g = v b = p
+		case 2 then r = p g = v b = t
+		case 3 then r = p g = q b = v
+		case 4 then r = t g = p b = v
+		case 5 then r = v g = p b = q
+	end
+	return ((@uint32)(r*255)<<16)+((@uint32)(g*255)<<8)+((@uint32)(b*255))
+end
+
+local function rgb2hue(rgb:uint32):integer
+
+	local hue:number
+  
+  local r = ((rgb>>16))     / 255
+  local g = ((rgb>>8)&0xff) / 255
+  local b = (rgb&0xff)      / 255
+  
+  local max = math.max(r,g,b)
+  local min = math.min(r,g,b)
+  
+  hue = (max + min) / 2
+
+  if max == min then return 0 end
+    local d = max - min
+    
+  if max == r then
+    hue = (g - b) / d % 6
+  elseif max == g then
+    hue = (b - r) / d + 2
+  elseif max == b then
+    hue = (r - g) / d + 4
+  end
+  
+  hue = hue / 6
+  
+  return (@integer)(hue*360)
+end
+
+local radius:number = 1
+local rCountdown = 0
+local leftIsDown,rightIsDown = false,false
+
+local width:cint,height:cint
+local currHue:integer = 0
+local sand = @record{
+	moved:boolean,
+	color:cint
+}
+local sandbox:vector(sand) = {}
+
+local function placeParticle(x:cint,y:cint,remove:boolean)
+	if x<0 or x>=width or y<0 or y>=height then return end
+	sandbox[x+y*width].color = remove and 0 or hsv2rgb(currHue,100,85)
+	currHue=(currHue+1)%360
+end
+
+local function placeSand(x:cint,y:cint,remove:boolean)
+
+	local function line(x1:integer,y1:integer,x2:integer,y2:integer,remove:boolean)
+		local dx, sx = math.abs(x2-x1), x1<x2 and 1 or -1
+	  local dy, sy = math.abs(y2-y1), y1<y2 and 1 or -1
+	  local err = math.floor((dx>dy and dx or -dy)/2)
+	  while(true) do
+	    placeParticle(x1, y1, remove)
+	    if (x1==x2 and y1==y2) then break end
+	    if (err > -dx) then
+	      err, x1 = err-dy, x1+sx
+	      if (x1==x2 and y1==y2) then
+	        placeParticle(x1, y1, remove)
+	        break
+	      end
+	    end
+	    if (err < dy) then
+	      err, y1 = err+dx, y1+sy
+	    end
+	  end
+	end
+	
+  local dx, dy, err = math.ifloor(radius), 0, 1-math.ifloor(radius)
+  while dx >= dy do
+    line(x+dx, y+dy,x-dx, y+dy, remove)
+    line(x+dx, y-dy,x-dx, y-dy, remove)
+    line(x+dy, y+dx,x-dy, y+dx, remove)
+    line(x+dy, y-dx,x-dy, y-dx, remove)
+    
+  	
+    dy = dy + 1
+    if err < 0 then
+      err = err + 2 * dy + 1
+    else
+      dx, err = dx-1, err + 2 * (dy - dx) + 1
+    end
+  end
+
+end
+
+tb_init()
+tb_set_output_mode(5)
+tb_set_input_mode(4)
+
+local ev:tb_event
+
+width  = tb_width()
+height = tb_height()-1
+
+local cx:cint,cy:cint = math.ifloor(width/2),math.ifloor(height/2)
+for _=1,width*height do
+	sandbox:push({false,0})
+end
+
+local helpStr1 <comptime> = "H = help  Q = quit"
+local helpStr2 <comptime> = "Left Click = Place sand"
+local helpStr3 <comptime> = "Right Click = Remove sand"
+local helpStr4 <comptime> = "Scroll wheel = Increase/Decrease radius"
+local helpStr5 <comptime> = "Press H again to go back"
+
+local helpMode = false
+
+local function drawGame()
+	tb_set_cell(cx,cy,' ',0,0xffffff)
+	for x=0,<width do
+		for y=0,<height do
+			local color = sandbox[x+y*width].color
+			if color==0 then continue end
+			if x==cx and y==cy then
+				tb_set_cell(x,y,' ',0,hsv2rgb(rgb2hue(color),60,100))
+			else
+				tb_set_cell(x,y,' ',0,color)
+			end	
+			
+		end
+	end
+
+	if rCountdown~=0 then
+		tb_printf(0,0,0xffffff,0,"Radius: %i",math.ifloor(radius)+1)
+	end
+	
+	
+	tb_printf(width/2-#helpStr1/2,height,0xffffff,0,helpStr1)
+end
+
+local function run():uint8
+	while string.char(ev.ch)~="q" do
+		tb_clear()
+		if helpMode then
+			tb_printf(math.ifloor(width/2)-math.ifloor(#helpStr2/2),math.ifloor(height/2)-1,0xffffff,0,helpStr2)
+			tb_printf(math.ifloor(width/2)-math.ifloor(#helpStr3/2),math.ifloor(height/2),0xffffff,0,helpStr3)
+			tb_printf(math.ifloor(width/2)-math.ifloor(#helpStr4/2),math.ifloor(height/2)+1,0xffffff,0,helpStr4)
+			tb_printf(math.ifloor(width/2)-math.ifloor(#helpStr5/2),math.ifloor(height/2)+3,0xffffff,0,helpStr5)
+		else
+			drawGame()
+		end
+		
+		tb_present()
+		
+		
+		for y=height-2,0,-1 do 
+			for x=0,<width do
+				local i = x+y*width
+				if sandbox[i].color==0 or sandbox[i].moved then continue end
+				local sand = &sandbox[i]
+				
+				
+				if sandbox[i+width].color==0 then
+					sandbox[i+width] = $sand
+				elseif x~=0 and sandbox[i+width-1].color==0 then
+					sandbox[i+width-1] = $sand
+				elseif x~=width-1 and sandbox[i+width+1].color==0 then
+					sandbox[i+width+1] = $sand 
+				else
+					continue
+				end
+				
+				sandbox[i].moved = true
+				($sand).color = 0
+			end
+		end
+		
+		for x=0,<width do
+			for y=height-1,0,-1 do 
+				local i = x+y*width
+		
+				sandbox[i].moved = false
+			end
+		end
+
+		tb_peek_event(&ev,16)
+
+		if rCountdown~=0 then
+			rCountdown = rCountdown - 1
+		end
+		
+		if helpMode then
+			if string.char(ev.ch)=="h" then helpMode=false end
+		elseif ev.type == 1 then
+			if ev.key==KEY_RIGHT then cx=cx+1 end
+			if ev.key==KEY_LEFT  then cx=cx-1 end
+			if ev.key==KEY_DOWN  then cy=cy+1 end
+			if ev.key==KEY_UP    then cy=cy-1 end
+			
+			if string.char(ev.ch)=="h" then helpMode=true end
+			
+
+		elseif ev.type == 2 then
+			return 1
+		elseif ev.type == 3 then
+			cx,cy = ev.x,ev.y
+			if ev.key==KEY_MOUSE_WHEEL_UP then 
+				rCountdown = 30 
+				radius = radius-0.25 
+			end
+			if ev.key==KEY_MOUSE_WHEEL_DOWN then 
+				rCountdown = 30 
+				radius = radius+0.25 
+			end
+			
+			if ev.key==KEY_MOUSE_LEFT then
+				leftIsDown = true
+			end
+			if ev.key==KEY_MOUSE_RIGHT then
+				rightIsDown = true
+			end
+			if ev.key==KEY_MOUSE_RELEASE then
+				leftIsDown  = false
+				rightIsDown = false
+			end
+		end
+		
+		if leftIsDown then
+			placeSand(cx,cy,false)
+		end
+		if rightIsDown then
+			placeSand(cx,cy,true)
+		end
+
+		
+		cx = cx <  0 and 0 or cx
+		cx = cx >= width and width-1 or cx
+		
+		cy = cy <  0 and 0 or cy
+		cy = cy >= height and height-1 or cy
+		
+		radius = radius < 0 and 0 or radius
+		radius = radius > 4 and 4 or radius
+		
+		
+		
+		if string.char(ev.ch)=="s" then 
+			placeSand(cx,cy,false)
+		end
+		if string.char(ev.ch)=="a" then 
+			placeSand(cx,cy,true)
+		end
+	end
+
+	return 0
+end
+
+local code = run()
+
+tb_shutdown()
+
+if code==1 then print("Resizing is unsupported") end
+os.exit(code)
